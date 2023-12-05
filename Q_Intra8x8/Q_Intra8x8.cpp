@@ -207,29 +207,29 @@ void GetDecodeIntraBlock(Mat& res, Mat encodeBlock, Mat signedBlock, Vec3b prePi
 			//Red
 			if (signedPixel[2] > 0)
 			{
-				resPixel[2] = curPrePixel[2] - encodePixel[2];
+				resPixel[2] = curPrePixel[2] + encodePixel[2];
 			}
 			else
 			{
-				resPixel[2] = encodePixel[2] - curPrePixel[2];
+				resPixel[2] = curPrePixel[2] - encodePixel[2];
 			}
 			//Green
 			if (signedPixel[1] > 0)
 			{
-				resPixel[1] = curPrePixel[1] - encodePixel[1];
+				resPixel[1] = curPrePixel[1] + encodePixel[1];
 			}
 			else
 			{
-				resPixel[1] = encodePixel[1] - curPrePixel[1];
+				resPixel[1] = curPrePixel[1] - encodePixel[1];
 			}
 			//Blue
 			if (signedPixel[0] > 0)
 			{
-				resPixel[0] = curPrePixel[0] - encodePixel[0];
+				resPixel[0] = curPrePixel[0] + encodePixel[0];
 			}
 			else
 			{
-				resPixel[0] = encodePixel[0] - curPrePixel[0];
+				resPixel[0] = curPrePixel[0] - encodePixel[0];
 			}
 
 			res.at<Vec3b>(j, i) = resPixel;
