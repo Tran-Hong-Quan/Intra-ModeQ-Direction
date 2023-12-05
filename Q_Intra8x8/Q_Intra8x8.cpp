@@ -186,7 +186,10 @@ void GenIntra(Mat img) {
 
 	imshow("Dif image", dif);
 	imshow("Copy image", copy);
-	imshow("Sigend image", signedImg);
+	imshow("Signed image", signedImg);
+
+	imwrite("BaseImgJPEG.jpg", img);
+	imwrite("IntraImage.jpg", dif);
 
 	GenDecodeIntra(dif,signedImg);
 }
