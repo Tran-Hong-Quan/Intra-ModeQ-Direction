@@ -5,7 +5,7 @@ using namespace cv;
 using namespace std;
 
 void GenIntra(Mat img);
-void GenDecodeIntra(Mat img);
+void GenDecodeIntra(Mat img,Mat signedImage);
 
 //  Z  A  B  C  D  E  F  G  H  I  J  K  L  M   N  O  P
 //  Q  a1 b1 c1 d1 e1 f1 g1 h1
@@ -46,7 +46,7 @@ int main(int argc, char** argv)
 	return 0;
 }
 
-void GetIntraBlock(Mat src, Vec3b prePixle[], Mat& difBlock, Mat& copyBlock) {
+void GetIntraBlock(Mat src, Vec3b prePixel[], Mat& difBlock, Mat& copyBlock, Mat& signedBlock) {
 	//Start from D, end at K
 	int prePixelIndex = 4;
 
@@ -54,8 +54,46 @@ void GetIntraBlock(Mat src, Vec3b prePixle[], Mat& difBlock, Mat& copyBlock) {
 	{
 		for (int j = 0; j < 8; j++)
 		{
-			copyBlock.at<Vec3b>(j, i) = prePixle[prePixelIndex];
-			difBlock.at<Vec3b>(j, i) = prePixle[prePixelIndex] - src.at<Vec3b>(j, i);
+			copyBlock.at<Vec3b>(j, i) = prePixel[prePixelIndex];
+
+			auto scrPixel = src.at<Vec3b>(j, i);
+			auto curPrePixel = prePixel[prePixelIndex];
+			Vec3b resPixel = Vec3b();
+			//Red
+			if (scrPixel[2] > curPrePixel[2])
+			{
+				resPixel[2] = scrPixel[2] - curPrePixel[2];
+				signedBlock.at<Vec3b>(j, i)[2] = (uchar)255;
+			}
+			else
+			{
+				resPixel[2] = curPrePixel[2] - scrPixel[2];
+				signedBlock.at<Vec3b>(j, i)[2] = (uchar)0;
+			}
+			//Green
+			if (scrPixel[1] > curPrePixel[1])
+			{
+				resPixel[1] = scrPixel[1] - curPrePixel[1];
+				signedBlock.at<Vec3b>(j, i)[1] = (uchar)255;
+			}
+			else
+			{
+				resPixel[1] = curPrePixel[1] - scrPixel[1];
+				signedBlock.at<Vec3b>(j, i)[1] = (uchar)0;
+			}
+			//Blue
+			if (scrPixel[0] > curPrePixel[0])
+			{
+				resPixel[0] = scrPixel[0] - curPrePixel[0];
+				signedBlock.at<Vec3b>(j, i)[0] = (uchar)255;
+			}
+			else
+			{
+				resPixel[0] = curPrePixel[0] - scrPixel[0];
+				signedBlock.at<Vec3b>(j, i)[0] = (uchar)0;
+			}
+
+			difBlock.at<Vec3b>(j, i) = resPixel;
 		}
 		prePixelIndex++;
 	}
@@ -69,6 +107,7 @@ void GenIntra(Mat img) {
 
 	Mat dif = cv::Mat(rows, cols, type);
 	Mat copy = cv::Mat(rows, cols, type);
+	Mat signedImg = cv::Mat(rows, cols, type);
 
 	Vec3b prePixel[25];
 	//Get Z
@@ -101,6 +140,7 @@ void GenIntra(Mat img) {
 			Mat copyBlock = cv::Mat(8, 8, type);
 			Mat difBlock = cv::Mat(8, 8, type);
 			Mat scr = cv::Mat(8, 8, type);
+			Mat signedBlock = cv::Mat(8, 8, type);
 
 			//Get source block
 			for (int i = 0; i < 8; i++)
@@ -114,7 +154,7 @@ void GenIntra(Mat img) {
 				}
 			}
 
-			GetIntraBlock(scr, prePixel, difBlock, copyBlock);
+			GetIntraBlock(scr, prePixel, difBlock, copyBlock, signedBlock);
 
 			//Paste to dif and copy image from block
 			for (int i = x, a = 0; i < x + 8; i++)
@@ -125,6 +165,7 @@ void GenIntra(Mat img) {
 					{
 						copy.at<Vec3b>(i, j) = copyBlock.at<Vec3b>(a, b);
 						dif.at<Vec3b>(i, j) = difBlock.at<Vec3b>(a, b);
+						signedImg.at<Vec3b>(i, j) = signedBlock.at<Vec3b>(a, b);
 					}
 					b++;
 				}
@@ -145,11 +186,12 @@ void GenIntra(Mat img) {
 
 	imshow("Dif image", dif);
 	imshow("Copy image", copy);
+	imshow("Sigend image", signedImg);
 
-	GenDecodeIntra(dif);
+	GenDecodeIntra(dif,signedImg);
 }
 
-void GetDecodeIntraBlock(Mat& res, Mat encodeBlock, Vec3b prePixle[]) {
+void GetDecodeIntraBlock(Mat& res, Mat encodeBlock, Mat signedBlock, Vec3b prePixel[]) {
 	//Start from D, end at K
 	int prePixelIndex = 4;
 
@@ -157,13 +199,46 @@ void GetDecodeIntraBlock(Mat& res, Mat encodeBlock, Vec3b prePixle[]) {
 	{
 		for (int j = 0; j < 8; j++)
 		{
-			res.at<Vec3b>(j, i) = prePixle[prePixelIndex] - encodeBlock.at<Vec3b>(j, i);
+			auto signedPixel = signedBlock.at<Vec3b>(j, i);
+			auto curPrePixel = prePixel[prePixelIndex];
+			auto encodePixel = encodeBlock.at<Vec3b>(j, i);
+
+			Vec3b resPixel = Vec3b();
+			//Red
+			if (signedPixel[2] > 0)
+			{
+				resPixel[2] = curPrePixel[2] - encodePixel[2];
+			}
+			else
+			{
+				resPixel[2] = encodePixel[2] - curPrePixel[2];
+			}
+			//Green
+			if (signedPixel[1] > 0)
+			{
+				resPixel[1] = curPrePixel[1] - encodePixel[1];
+			}
+			else
+			{
+				resPixel[1] = encodePixel[1] - curPrePixel[1];
+			}
+			//Blue
+			if (signedPixel[0] > 0)
+			{
+				resPixel[0] = curPrePixel[0] - encodePixel[0];
+			}
+			else
+			{
+				resPixel[0] = encodePixel[0] - curPrePixel[0];
+			}
+
+			res.at<Vec3b>(j, i) = resPixel;
 		}
 		prePixelIndex++;
 	}
 }
 
-void GenDecodeIntra(Mat img) {
+void GenDecodeIntra(Mat img, Mat signedImage) {
 	int  rows = img.rows;
 	int  cols = img.cols;
 	auto type = img.type();
@@ -199,20 +274,27 @@ void GenDecodeIntra(Mat img) {
 
 			Mat resBlock = cv::Mat(8, 8, type);
 			Mat scr = cv::Mat(8, 8, type);
+			Mat signedBlock = cv::Mat(8, 8, type);
 
-			//Get source block
+			//Get and signed source block
 			for (int i = 0; i < 8; i++)
 			{
 				for (int j = 0; j < 8; j++)
 				{
 					if (x + i >= rows || y + j >= cols)
+					{
 						scr.at<Vec3b>(i, j) = Vec3b(0, 0, 0);
+						signedBlock.at<Vec3b>(i, j) = Vec3b(0, 0, 0);
+					}
 					else
+					{
 						scr.at<Vec3b>(i, j) = img.at<Vec3b>(x + i, y + j);
+						signedBlock.at<Vec3b>(i, j) = signedImage.at<Vec3b>(x + i, y + j);
+					}
 				}
 			}
 
-			GetDecodeIntraBlock(resBlock, scr, prePixel);
+			GetDecodeIntraBlock(resBlock, scr, signedBlock, prePixel);
 
 			//Paste to res from res block
 			for (int i = x, a = 0; i < x + 8; i++)
