@@ -5,7 +5,7 @@ using namespace cv;
 using namespace std;
 
 void GenIntra(Mat img);
-void GenDecodeIntra(Mat img,Mat signedImage);
+Mat GenDecodeIntra(Mat img, Mat signedImage);
 
 //  Z  A  B  C  D  E  F  G  H  I  J  K  L  M   N  O  P
 //  Q  a1 b1 c1 d1 e1 f1 g1 h1
@@ -55,7 +55,7 @@ Mat GetQModeCopyBlock(Vec3b prePixel[], int type)
 		for (int j = 0; j < 8; j++)
 		{
 			int index = 4 + i + j;
-			if (index > 16) index = 0;
+			if (index > 16) index = index % 17 + 4;
 			QBlock.at<Vec3b>(j, i) = prePixel[index];
 		}
 	}
@@ -71,7 +71,7 @@ void GetIntraBlockNoSignal(Mat src, Vec3b prePixel[], Mat& difBlock, Mat& copyBl
 	{
 		for (int j = 0; j < 8; j++)
 		{
-			difBlock.at<Vec3b>(i, j) =  copyBlock.at<Vec3b>(i, j) - src.at<Vec3b>(i, j);
+			difBlock.at<Vec3b>(i, j) = copyBlock.at<Vec3b>(i, j) - src.at<Vec3b>(i, j);
 		}
 	}
 }
@@ -79,7 +79,7 @@ void GetIntraBlockNoSignal(Mat src, Vec3b prePixel[], Mat& difBlock, Mat& copyBl
 void GetIntraBlock(Mat src, Vec3b prePixel[], Mat& difBlock, Mat& copyBlock, Mat& signedBlock) {
 	//Start from D, end at K
 	int prePixelIndex = 4;
-	copyBlock = GetQModeCopyBlock(prePixel,src.type());
+	copyBlock = GetQModeCopyBlock(prePixel, src.type());
 
 	for (int i = 0; i < 8; i++)
 	{
@@ -183,8 +183,8 @@ void GenIntra(Mat img) {
 				}
 			}
 
-			//GetIntraBlock(scr, prePixel, difBlock, copyBlock, signedBlock);
-			GetIntraBlockNoSignal(scr, prePixel, difBlock, copyBlock);
+			GetIntraBlock(scr, prePixel, difBlock, copyBlock, signedBlock);
+			//GetIntraBlockNoSignal(scr, prePixel, difBlock, copyBlock);
 
 			//Paste to dif and copy image from block
 			for (int i = x, a = 0; i < x + 8; i++)
@@ -221,7 +221,10 @@ void GenIntra(Mat img) {
 	imwrite("BaseImgJPEG.jpg", img);
 	imwrite("IntraImage.jpg", dif);
 
-	GenDecodeIntra(dif,signedImg);
+	auto dec = GenDecodeIntra(dif, signedImg);
+
+	cout<<cv::PSNR(img, img)<<endl;
+	cout<<cv::PSNR(img, dec)<<endl;
 }
 
 void GetDecodeIntraBlockNoSignal(Mat& res, Mat encodeBlock, Vec3b prePixel[]) {
@@ -239,7 +242,7 @@ void GetDecodeIntraBlockNoSignal(Mat& res, Mat encodeBlock, Vec3b prePixel[]) {
 
 void GetDecodeIntraBlock(Mat& res, Mat encodeBlock, Mat signedBlock, Vec3b prePixel[]) {
 	//Start from D, end at K
-	auto copyBlock  = GetQModeCopyBlock(prePixel, encodeBlock.type());
+	auto copyBlock = GetQModeCopyBlock(prePixel, encodeBlock.type());
 
 	for (int i = 0; i < 8; i++)
 	{
@@ -283,7 +286,7 @@ void GetDecodeIntraBlock(Mat& res, Mat encodeBlock, Mat signedBlock, Vec3b prePi
 	}
 }
 
-void GenDecodeIntra(Mat img, Mat signedImage) {
+Mat GenDecodeIntra(Mat img, Mat signedImage) {
 	int  rows = img.rows;
 	int  cols = img.cols;
 	auto type = img.type();
@@ -339,8 +342,8 @@ void GenDecodeIntra(Mat img, Mat signedImage) {
 				}
 			}
 
-			//GetDecodeIntraBlock(resBlock, scr, signedBlock, prePixel);
-			GetDecodeIntraBlockNoSignal(resBlock, scr, prePixel);
+			GetDecodeIntraBlock(resBlock, scr, signedBlock, prePixel);
+			//GetDecodeIntraBlockNoSignal(resBlock, scr, prePixel);
 
 			//Paste to res from res block
 			for (int i = x, a = 0; i < x + 8; i++)
@@ -358,5 +361,17 @@ void GenDecodeIntra(Mat img, Mat signedImage) {
 		}
 	}
 
+	//Copy border from source img to dif img
+	for (int i = 0; i < cols; i++)
+	{
+		res.at<Vec3b>(0, i) = img.at<Vec3b>(0, i);
+	}
+	for (int i = 0; i < rows; i++)
+	{
+		res.at<Vec3b>(i, 0) = img.at<Vec3b>(i, 0);
+	}
+
 	imshow("Decode img", res);
+
+	return res;
 }
