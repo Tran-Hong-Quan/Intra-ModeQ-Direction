@@ -46,54 +46,83 @@ int main(int argc, char** argv)
 	return 0;
 }
 
-void GetIntraBlock(Mat src, Vec3b prePixel[], Mat& difBlock, Mat& copyBlock, Mat& signedBlock) {
-	//Start from D, end at K
-	int prePixelIndex = 4;
+Mat GetQModeCopyBlock(Vec3b prePixel[], int type)
+{
+	Mat QBlock = Mat(8, 8, type);
 
 	for (int i = 0; i < 8; i++)
 	{
 		for (int j = 0; j < 8; j++)
 		{
-			copyBlock.at<Vec3b>(j, i) = prePixel[prePixelIndex];
+			int index = 4 + i + j;
+			if (index > 16) index = 0;
+			QBlock.at<Vec3b>(j, i) = prePixel[index];
+		}
+	}
 
-			auto scrPixel = src.at<Vec3b>(j, i);
-			auto curPrePixel = prePixel[prePixelIndex];
+	return QBlock;
+}
+
+void GetIntraBlockNoSignal(Mat src, Vec3b prePixel[], Mat& difBlock, Mat& copyBlock) {
+	int prePixelIndex = 4;
+	copyBlock = GetQModeCopyBlock(prePixel, src.type());
+
+	for (int i = 0; i < 8; i++)
+	{
+		for (int j = 0; j < 8; j++)
+		{
+			difBlock.at<Vec3b>(i, j) =  copyBlock.at<Vec3b>(i, j) - src.at<Vec3b>(i, j);
+		}
+	}
+}
+
+void GetIntraBlock(Mat src, Vec3b prePixel[], Mat& difBlock, Mat& copyBlock, Mat& signedBlock) {
+	//Start from D, end at K
+	int prePixelIndex = 4;
+	copyBlock = GetQModeCopyBlock(prePixel,src.type());
+
+	for (int i = 0; i < 8; i++)
+	{
+		for (int j = 0; j < 8; j++)
+		{
+			auto scrPixel = src.at<Vec3b>(i, j);
+			auto curPrePixel = copyBlock.at<Vec3b>(i, j);
 			Vec3b resPixel = Vec3b();
 			//Red
 			if (scrPixel[2] > curPrePixel[2])
 			{
 				resPixel[2] = scrPixel[2] - curPrePixel[2];
-				signedBlock.at<Vec3b>(j, i)[2] = (uchar)255;
+				signedBlock.at<Vec3b>(i, j)[2] = (uchar)255;
 			}
 			else
 			{
 				resPixel[2] = curPrePixel[2] - scrPixel[2];
-				signedBlock.at<Vec3b>(j, i)[2] = (uchar)0;
+				signedBlock.at<Vec3b>(i, j)[2] = (uchar)0;
 			}
 			//Green
 			if (scrPixel[1] > curPrePixel[1])
 			{
 				resPixel[1] = scrPixel[1] - curPrePixel[1];
-				signedBlock.at<Vec3b>(j, i)[1] = (uchar)255;
+				signedBlock.at<Vec3b>(i, j)[1] = (uchar)255;
 			}
 			else
 			{
 				resPixel[1] = curPrePixel[1] - scrPixel[1];
-				signedBlock.at<Vec3b>(j, i)[1] = (uchar)0;
+				signedBlock.at<Vec3b>(i, j)[1] = (uchar)0;
 			}
 			//Blue
 			if (scrPixel[0] > curPrePixel[0])
 			{
 				resPixel[0] = scrPixel[0] - curPrePixel[0];
-				signedBlock.at<Vec3b>(j, i)[0] = (uchar)255;
+				signedBlock.at<Vec3b>(i, j)[0] = (uchar)255;
 			}
 			else
 			{
 				resPixel[0] = curPrePixel[0] - scrPixel[0];
-				signedBlock.at<Vec3b>(j, i)[0] = (uchar)0;
+				signedBlock.at<Vec3b>(i, j)[0] = (uchar)0;
 			}
 
-			difBlock.at<Vec3b>(j, i) = resPixel;
+			difBlock.at<Vec3b>(i, j) = resPixel;
 		}
 		prePixelIndex++;
 	}
@@ -154,7 +183,8 @@ void GenIntra(Mat img) {
 				}
 			}
 
-			GetIntraBlock(scr, prePixel, difBlock, copyBlock, signedBlock);
+			//GetIntraBlock(scr, prePixel, difBlock, copyBlock, signedBlock);
+			GetIntraBlockNoSignal(scr, prePixel, difBlock, copyBlock);
 
 			//Paste to dif and copy image from block
 			for (int i = x, a = 0; i < x + 8; i++)
@@ -194,17 +224,30 @@ void GenIntra(Mat img) {
 	GenDecodeIntra(dif,signedImg);
 }
 
-void GetDecodeIntraBlock(Mat& res, Mat encodeBlock, Mat signedBlock, Vec3b prePixel[]) {
+void GetDecodeIntraBlockNoSignal(Mat& res, Mat encodeBlock, Vec3b prePixel[]) {
 	//Start from D, end at K
-	int prePixelIndex = 4;
+	auto copyBlock = GetQModeCopyBlock(prePixel, encodeBlock.type());
 
 	for (int i = 0; i < 8; i++)
 	{
 		for (int j = 0; j < 8; j++)
 		{
-			auto signedPixel = signedBlock.at<Vec3b>(j, i);
-			auto curPrePixel = prePixel[prePixelIndex];
-			auto encodePixel = encodeBlock.at<Vec3b>(j, i);
+			res.at<Vec3b>(i, j) = copyBlock.at<Vec3b>(i, j) - encodeBlock.at<Vec3b>(i, j);
+		}
+	}
+}
+
+void GetDecodeIntraBlock(Mat& res, Mat encodeBlock, Mat signedBlock, Vec3b prePixel[]) {
+	//Start from D, end at K
+	auto copyBlock  = GetQModeCopyBlock(prePixel, encodeBlock.type());
+
+	for (int i = 0; i < 8; i++)
+	{
+		for (int j = 0; j < 8; j++)
+		{
+			auto signedPixel = signedBlock.at<Vec3b>(i, j);
+			auto curPrePixel = copyBlock.at<Vec3b>(i, j);
+			auto encodePixel = encodeBlock.at<Vec3b>(i, j);
 
 			Vec3b resPixel = Vec3b();
 			//Red
@@ -235,9 +278,8 @@ void GetDecodeIntraBlock(Mat& res, Mat encodeBlock, Mat signedBlock, Vec3b prePi
 				resPixel[0] = curPrePixel[0] - encodePixel[0];
 			}
 
-			res.at<Vec3b>(j, i) = resPixel;
+			res.at<Vec3b>(i, j) = resPixel;
 		}
-		prePixelIndex++;
 	}
 }
 
@@ -297,7 +339,8 @@ void GenDecodeIntra(Mat img, Mat signedImage) {
 				}
 			}
 
-			GetDecodeIntraBlock(resBlock, scr, signedBlock, prePixel);
+			//GetDecodeIntraBlock(resBlock, scr, signedBlock, prePixel);
+			GetDecodeIntraBlockNoSignal(resBlock, scr, prePixel);
 
 			//Paste to res from res block
 			for (int i = x, a = 0; i < x + 8; i++)
